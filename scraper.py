@@ -7,6 +7,7 @@ import tiktoken
 from secrets import api_key, username, password
 from helpers import preprocess_text
 from money_stuff import scrape_money_stuff
+import ast
 
 openai.api_key = api_key
 
@@ -78,6 +79,15 @@ def get_articles(soup) -> dict:
 
     for a in soup.find_all("a", attrs={"data-analytics": True}):
         url = homepage_url + a["href"]
+
+        # If the article is from an unwanted section, skip it
+        if "podcast" in url:
+            print(f"{url} is a podcast, skipping...")
+            continue
+        elif "the-economist-reads" in url:
+            print(f"{url} is a book review, skipping...")
+            continue
+
         title = a.text
 
         # Check if URL is already in previous_dbs.txt
@@ -118,12 +128,22 @@ def get_articles(soup) -> dict:
 
     return articles
 
-def summarise_article(title, text, sentences):
+def summarise_article(title, text, sentences) -> str:
     messages = [
         {"role": "system",
-         "content": "You are an assistant to the President who helps prepare the President's Daily Priefing (PDB), a daily summary of articles published in The Economist. The reading level should be aimed at an educated audience."},
+         "content": "You are part of a system that constructs the President's Daily Briefing. You help produce a summary of articles and offer your professional opinion, as an expert advisor. You output a Python dictionary."},
         {"role": "user",
-         "content": f"Summarise the following article in {sentences} long and detailed sentences. Include what is about, what the main points are, and what the conclusion is. The goal is to provide a summary that is accurate and concise and helps the reader decide if they want to read the full article.\n\nTitle: {title}\n\nArticle body: {text}\n\n\n\n\n\nOnly output the summary. Do not output the title. You cannot output more than {sentences} long and detailed sentences. Stop words, such as 'a', 'an', 'the', and other common words that do not carry significant meaning, may have been removed from the original text."},
+         "content": f"Summarise the following article in {sentences} long and detailed sentences. "
+                    f"Include what is about, what the main points are, and what the conclusion is. "
+                    f"The goal is to provide a summary that is accurate and concise and helps the reader decide if "
+                    f"they want to read the full article.\n\nThen, act as an expert advisor to the president. "
+                    f"Provide 2-3 sentences which will serve as a note from an expert. Your goal is to add extra "
+                    f"context, draw connections to historical events, policies, trends, etc.\n\n"
+                    f"Title: {title}\nArticle body: {text}\n\n\n\n\n\nYour output takes the form of a Python "
+                    'dictionary:\n\n{"summary": "your summary...", "advisor": "expert advisors comments..."}\n\nOnly output '
+                    f"the Python dictionary. Stop words, such as 'a', 'an', 'the', and other common words that do not "
+                    f"carry significant meaning, may have been removed from the original text. Remember, the president "
+                    f"is an expert and it can be assumed they have a high degree of background knowledge on the topic."},
     ]
 
     response = openai.ChatCompletion.create(
@@ -133,8 +153,13 @@ def summarise_article(title, text, sentences):
         max_tokens=500,
     )
 
-    summary = response['choices'][0]['message']['content']
-    return summary
+    summary_string = response['choices'][0]['message']['content']
+    print()
+    print(summary_string)
+    result_dict = ast.literal_eval(summary_string)
+    summary = result_dict['summary']
+    advisor = result_dict['advisor']
+    return summary, advisor
 
 
 # Function to generate the HTML page
@@ -230,6 +255,7 @@ def generate_html_page(articles, logo_image="economist_logo.png"):
             </div>
         </div>
         <p>{summary}</p>
+        <p><span style="color: #E3120B;">Opinion:</span> {advisor}</p>
         <a href="{url}" target="_blank">Read more</a>
         </div>
     </div>
@@ -242,6 +268,7 @@ def generate_html_page(articles, logo_image="economist_logo.png"):
         date = article["date"]
         summary = article["summary"]
         source = article["source"]
+        advisor = article["advisor"]
 
         logo_path = "logos/"
         if source == "The Economist":
@@ -250,7 +277,7 @@ def generate_html_page(articles, logo_image="economist_logo.png"):
             logo_path += "bloomberg.png"
 
         formatted_date = date.strftime("%d %B %Y")
-        articles_html += article_template.format(title=title, summary=summary, url=url, logo_image=logo_path, date=formatted_date)
+        articles_html += article_template.format(title=title, summary=summary, url=url, logo_image=logo_path, date=formatted_date, advisor=advisor)
 
     return html_template.format(articles_html=articles_html)
 
@@ -311,6 +338,7 @@ if __name__ == "__main__":
         print("Error scraping Money Stuff")
         print(e)
 
+    all_text = ""
     for url, article in articles.items():
         title = article["title"]
         text = article["article_text"]
@@ -318,29 +346,43 @@ if __name__ == "__main__":
         # Reduce token length of text
         text = preprocess_text(text, stem=False, remove_stopwords=True, keep_newlines=True)
 
+        # Remove apostrophes from the text to avoid errors with dictionary syntax
+        text = text.replace("'", "\'")
+        text = text.replace('"', '\"')
+
         # Check article isn't too many tokens
         text = [{"role": "user", "content": text}]
         num_tokens = num_tokens_from_messages(text)
         if num_tokens > 3500:
             # Run code to split and summarize
             text = recursive_summarize(text)
+            text = [{"role": "user", "content": text}]
+
+        if article["source"] == "Bloomberg":
+            sentences = 5
+        else:
+            sentences = 3
 
         try:
-            if article["source"] == "Bloomberg":
-                sentences = 5
-            else:
-                sentences = 3
-
-            summary = summarise_article(title, text, sentences)
+            text = text[0]["content"]
+            summary, advisor = summarise_article(title, text, sentences)
         except Exception as e:
-            # Print the first 50 charactes of text to help debug
-            print(f"Error summarising {text[:50]}")
+            # Print the first 50 characters of text to help debug
+            print(f"Error summarising {text}")
             print(e)
             summary = "Error summarising article."
 
         articles[url]["summary"] = summary
+        articles[url]["advisor"] = advisor
 
     #print(articles)
+
+        all_text += f"{title} ({article['date']}, {article['source']}):\n{summary}\n\nOpinion: {advisor}\n"
+        all_text += "---------------\n\n"
+
+    # Save the text to a file
+    with open("your_world_in_brief.txt", "w") as file:
+        file.write(all_text)
 
     # Save the HTML page to a file
     with open("your_world_in_brief.html", "w") as file:
