@@ -5,9 +5,10 @@ import os
 import openai
 import tiktoken
 from secrets import api_key, username, password
+from helpers import preprocess_text
+from money_stuff import scrape_money_stuff
 
 openai.api_key = api_key
-
 
 def login_to_economist(username, password):
     login_url = "https://myaccount.economist.com/s/login"
@@ -113,24 +114,23 @@ def get_articles(soup) -> dict:
                 "article_text": article_text,
                 "source": "The Economist"
             }
-            print(f"    • Added {title} to dictionary")
+            print(f"    • Added '{title}' to dictionary")
 
     return articles
 
-
-def summarise_article(title, text):
+def summarise_article(title, text, sentences):
     messages = [
         {"role": "system",
          "content": "You are an assistant to the President who helps prepare the President's Daily Priefing (PDB), a daily summary of articles published in The Economist. The reading level should be aimed at an educated audience."},
         {"role": "user",
-         "content": f"Summarise the following article in three sentences. Include what is about, what the main points are, and what the conclusion is. The goal is to provide a summary that is accurate and concise and helps the reader decide if they want to read the full article.\n\nTitle: {title}\n\nArticle body: {text}\n\n\n\n\n\nOnly output the summary. Do not output the title."},
+         "content": f"Summarise the following article in {sentences} long and detailed sentences. Include what is about, what the main points are, and what the conclusion is. The goal is to provide a summary that is accurate and concise and helps the reader decide if they want to read the full article.\n\nTitle: {title}\n\nArticle body: {text}\n\n\n\n\n\nOnly output the summary. Do not output the title. You cannot output more than {sentences} long and detailed sentences. Stop words, such as 'a', 'an', 'the', and other common words that do not carry significant meaning, may have been removed from the original text."},
     ]
 
     response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
         messages=messages,
         temperature=0,
-        max_tokens=250,
+        max_tokens=500,
     )
 
     summary = response['choices'][0]['message']['content']
@@ -246,6 +246,8 @@ def generate_html_page(articles, logo_image="economist_logo.png"):
         logo_path = "logos/"
         if source == "The Economist":
             logo_path += "the_economist.png"
+        elif source == "Bloomberg":
+            logo_path += "bloomberg.png"
 
         formatted_date = date.strftime("%d %B %Y")
         articles_html += article_template.format(title=title, summary=summary, url=url, logo_image=logo_path, date=formatted_date)
@@ -258,7 +260,7 @@ def summarise_section(text):
         {"role": "system",
          "content": "You are an article summariser. Your goal is to reduce the text so it is about half the length."},
         {"role": "user",
-         "content": f"Summarise the following article so it is half the length. Make sure to include detail.\n\nArticle body: {text}\n\n\n\n\n\nOnly output the summary."},
+         "content": f"Summarise the following article so it is half the length. Make sure to include detail.\n\nArticle body: {text}\n\n\n\n\n\nOnly output the summary. Stop words, such as 'a', 'an', 'the', and other common words that do not carry significant meaning, may have been removed from the original text."},
     ]
 
     response = openai.ChatCompletion.create(
@@ -301,9 +303,20 @@ if __name__ == "__main__":
     soup = scrape_homepage(session, homepage_url)
     articles = get_articles(soup)
 
+    # Get Money Stuff articles
+    try:
+        latest_newsletter_text = scrape_money_stuff()
+        articles.update(latest_newsletter_text)
+    except Exception as e:
+        print("Error scraping Money Stuff")
+        print(e)
+
     for url, article in articles.items():
         title = article["title"]
         text = article["article_text"]
+
+        # Reduce token length of text
+        text = preprocess_text(text, stem=False, remove_stopwords=True, keep_newlines=True)
 
         # Check article isn't too many tokens
         text = [{"role": "user", "content": text}]
@@ -313,9 +326,15 @@ if __name__ == "__main__":
             text = recursive_summarize(text)
 
         try:
-            summary = summarise_article(title, text)
+            if article["source"] == "Bloomberg":
+                sentences = 5
+            else:
+                sentences = 3
+
+            summary = summarise_article(title, text, sentences)
         except Exception as e:
-            print(f"Error summarising {text}")
+            # Print the first 50 charactes of text to help debug
+            print(f"Error summarising {text[:50]}")
             print(e)
             summary = "Error summarising article."
 
