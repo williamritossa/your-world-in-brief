@@ -1,22 +1,16 @@
-import requests
-from bs4 import BeautifulSoup
-from datetime import datetime
-import os
 import openai
 import tiktoken
-from secrets import api_key, username, password
+from secrets import api_key
 from helpers import preprocess_text
 from money_stuff import scrape_money_stuff
+from the_economist import scrape_the_economist
 import ast
+import uuid
+from embeddings import Embeddings
+import csv
+from datetime import date
 
 openai.api_key = api_key
-
-def login_to_economist(username, password):
-    login_url = "https://myaccount.economist.com/s/login"
-    payload = {"username": username, "password": password}
-    session = requests.Session()
-    session.post(login_url, data=payload)
-    return session
 
 
 def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0301"):
@@ -51,83 +45,6 @@ def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0301"):
     return num_tokens
 
 
-def get_previous_wdbs():
-    if os.path.exists("previous_dbs.txt"):
-        with open("previous_dbs.txt", "r") as f:
-            previous_wdbs = f.read().splitlines()
-    else:
-        previous_wdbs = []
-    return previous_wdbs
-
-
-def save_url_to_previous_wdbs(url):
-    with open("previous_dbs.txt", "a") as f:
-        f.write(url + "\n")
-
-
-def scrape_homepage(session, homepage_url) -> BeautifulSoup:
-    response = session.get(homepage_url)
-    soup = BeautifulSoup(response.text, "html.parser")
-    return soup
-
-
-def get_articles(soup) -> dict:
-    # Extract article URLs and titles
-    articles = {}
-    # current_time = datetime.now()
-    previous_wdbs = get_previous_wdbs()
-
-    for a in soup.find_all("a", attrs={"data-analytics": True}):
-        url = homepage_url + a["href"]
-
-        # If the article is from an unwanted section, skip it
-        if "podcast" in url:
-            print(f"{url} is a podcast, skipping...")
-            continue
-        elif "the-economist-reads" in url:
-            print(f"{url} is a book review, skipping...")
-            continue
-
-        title = a.text
-
-        # Check if URL is already in previous_dbs.txt
-        if url in previous_wdbs:
-            print(f"{url} is already in previous_dbs.txt, skipping...")
-            continue
-        else:
-            # Add URL to previous_dbs.txt
-            with open("previous_dbs.txt", "a") as f:
-                f.write(url + "\n")
-
-        # Fetch the article content
-        article_response = session.get(url)
-        article_soup = BeautifulSoup(article_response.text, "html.parser")
-
-        try:
-            article_datetime_str = article_soup.find("time", class_="css-j5ehde e1fl1tsy0")["datetime"]
-            article_datetime = datetime.strptime(article_datetime_str, "%Y-%m-%dT%H:%M:%SZ")
-        except:
-            article_datetime = None
-
-        print(title, article_datetime)
-
-        try:
-            article_text = article_soup.find("div", class_="css-13gy2f5 e1prll3w0").text
-        except:
-            article_text = None
-
-        if article_datetime is not None and article_text is not None:  # if current_time - article_datetime < timedelta(hours=48):
-            # Save to dictionary
-            articles[url] = {
-                "title": title,
-                "date": article_datetime,
-                "article_text": article_text,
-                "source": "The Economist"
-            }
-            print(f"    • Added '{title}' to dictionary")
-
-    return articles
-
 def summarise_article(title, text, sentences) -> str:
     messages = [
         {"role": "system",
@@ -154,8 +71,6 @@ def summarise_article(title, text, sentences) -> str:
     )
 
     summary_string = response['choices'][0]['message']['content']
-    print()
-    print(summary_string)
     result_dict = ast.literal_eval(summary_string)
     summary = result_dict['summary']
     advisor = result_dict['advisor']
@@ -163,7 +78,7 @@ def summarise_article(title, text, sentences) -> str:
 
 
 # Function to generate the HTML page
-def generate_html_page(articles, logo_image="economist_logo.png"):
+def generate_html_page(articles):
     html_template = """
     <!DOCTYPE html>
     <html lang="en">
@@ -247,7 +162,7 @@ def generate_html_page(articles, logo_image="economist_logo.png"):
 
     article_template = """
     <div class="article">
-        <img class="logo" src="{logo_image}" alt="Source logo" />
+        <img class="logo" src="{logo_url}" alt="Source logo" />
         <div class="header">
             <div class="title-date">
                 <h2>{title}</h2>
@@ -255,7 +170,7 @@ def generate_html_page(articles, logo_image="economist_logo.png"):
             </div>
         </div>
         <p>{summary}</p>
-        <p><span style="color: #E3120B;">Opinion:</span> {advisor}</p>
+        <p><span style="color: #E3120B;">Opinion:</span> {opinion}</p>
         <a href="{url}" target="_blank">Read more</a>
         </div>
     </div>
@@ -268,16 +183,15 @@ def generate_html_page(articles, logo_image="economist_logo.png"):
         date = article["date"]
         summary = article["summary"]
         source = article["source"]
-        advisor = article["advisor"]
+        opinion = article["opinion"]
 
-        logo_path = "logos/"
         if source == "The Economist":
-            logo_path += "the_economist.png"
+            logo_path = "https://www.economist.com/engassets/google-search-logo.f1ea908894.png"
         elif source == "Bloomberg":
-            logo_path += "bloomberg.png"
+            logo_path = "https://pbs.twimg.com/profile_images/1016326195221352450/KCcdUN0v_400x400.jpg"
 
         formatted_date = date.strftime("%d %B %Y")
-        articles_html += article_template.format(title=title, summary=summary, url=url, logo_image=logo_path, date=formatted_date, advisor=advisor)
+        articles_html += article_template.format(title=title, summary=summary, url=url, logo_url=logo_url, date=formatted_date, opinion=opinion)
 
     return html_template.format(articles_html=articles_html)
 
@@ -323,68 +237,155 @@ def recursive_summarize(text_ChatML, max_tokens=3500):
     return recursive_summarize(messages, max_tokens)
 
 
-if __name__ == "__main__":
-    session = login_to_economist(username, password)
+def preprocessing_for_gpt(article):
+    title = article["title"]
+    text = article["article_text"]
 
-    homepage_url = "https://www.economist.com"
-    soup = scrape_homepage(session, homepage_url)
-    articles = get_articles(soup)
+    # Reduce token length of text
+    text = preprocess_text(text, stem=False, remove_stopwords=True, keep_newlines=True)
+
+    # Remove apostrophes from the text to avoid errors with dictionary syntax
+    text = text.replace("'", "\'")
+    text = text.replace('"', '\"')
+
+    # Check article isn't too many tokens
+    text = [{"role": "user", "content": text}]
+    num_tokens = num_tokens_from_messages(text)
+    if num_tokens > 3500:
+        # Run code to split and summarize
+        text = recursive_summarize(text)
+        text = [{"role": "user", "content": text}]
+
+    if article["source"] == "Bloomberg":
+        sentences = 5
+    else:
+        sentences = 3
+
+    max_attempts = 5
+    success = False
+
+    for attempt in range(max_attempts):
+        try:
+            text = text[0]["content"]
+            summary, opinion = summarise_article(title, text, sentences)
+            success = True
+            break  # If the call is successful, exit the loop
+        except Exception as e:
+            print(f"Error summarising {text[:50]} (attempt {attempt + 1}): {e}")
+
+    if not success:
+        summary = "Error summarising article."
+        opinion = "Error generating opinion."
+
+    return summary, opinion
+
+
+if __name__ == "__main__":
+    articles = {}
+
+    print("Scraping articles")
+    # Get The Economist articles
+    try:
+        print("  • Scraping The Economist...")
+        economist_articles = scrape_the_economist()
+        articles.update(economist_articles)
+    except Exception as e:
+        print(f"  ✗ Error scraping The Economist: {e}")
 
     # Get Money Stuff articles
     try:
+        print("  • Scraping Money Stuff by Matt Levine...")
         latest_newsletter_text = scrape_money_stuff()
         articles.update(latest_newsletter_text)
     except Exception as e:
-        print("Error scraping Money Stuff")
-        print(e)
+        print(f"  ✗ Error scraping Money Stuff: {e}")
 
-    all_text = ""
-    for url, article in articles.items():
-        title = article["title"]
-        text = article["article_text"]
+    print()
+    print("Saving articles to database")
+    # Open the CSV file in read mode to check for duplicates
+    with open("database/articles.csv", "r", newline="") as f:
+        reader = csv.reader(f)
+        existing_urls = {row[1] for row in reader}
 
-        # Reduce token length of text
-        text = preprocess_text(text, stem=False, remove_stopwords=True, keep_newlines=True)
+    # Add new articles to the database
+    new_articles = {}
+    with open("database/articles.csv", "a", newline="") as f:
+        writer = csv.writer(f)
 
-        # Remove apostrophes from the text to avoid errors with dictionary syntax
-        text = text.replace("'", "\'")
-        text = text.replace('"', '\"')
+        # Loop through the articles and write each one to a new row in the CSV
+        for url, article_data in articles.items():
+            print(f"  • {url}:")
+            if url in existing_urls:
+                print(f"    ⏭ Skipping as it already exists in the CSV")
+                continue
 
-        # Check article isn't too many tokens
-        text = [{"role": "user", "content": text}]
-        num_tokens = num_tokens_from_messages(text)
-        if num_tokens > 3500:
-            # Run code to split and summarize
-            text = recursive_summarize(text)
-            text = [{"role": "user", "content": text}]
+            article_uuid = uuid.uuid4()
+            articles[url]["uuid"] = article_uuid
+            article_title = article_data["title"]
+            article_date = article_data["date"].strftime("%Y-%m-%d %H:%M:%S")
+            article_text = article_data["article_text"]
+            article_source = article_data["source"]
 
-        if article["source"] == "Bloomberg":
-            sentences = 5
-        else:
-            sentences = 3
+            print(f"    • Generating summary and opinion")
+            article_summary, article_opinion = preprocessing_for_gpt(article_data)
+            articles[url]["summary"] = article_summary
+            articles[url]["opinion"] = article_opinion
 
-        try:
-            text = text[0]["content"]
-            summary, advisor = summarise_article(title, text, sentences)
-        except Exception as e:
-            # Print the first 50 characters of text to help debug
-            print(f"Error summarising {text}")
-            print(e)
-            summary = "Error summarising article."
+            writer.writerow([article_uuid, url, article_title, article_date, article_source, article_text, article_summary, article_opinion])
+            new_articles[url] = article_data
+            print(f"    ✓ Added to the CSV with UUID {article_uuid}")
 
-        articles[url]["summary"] = summary
-        articles[url]["advisor"] = advisor
+    print()
+    print("Generating semantic embeddings")
+    embedder = Embeddings()
 
-    #print(articles)
+    # Create and open the embeddings CSV file
+    with open("database/article_embeddings.csv", "a", newline="") as f:
+        writer_article = csv.writer(f)
 
-        all_text += f"{title} ({article['date']}, {article['source']}):\n{summary}\n\nOpinion: {advisor}\n"
-        all_text += "---------------\n\n"
+        # Write the header row if the file is empty
+        if f.tell() == 0:
+            writer_article.writerow(["article_uuid", "embedding_uuid", "text", "embedding"])
 
-    # Save the text to a file
-    with open("your_world_in_brief.txt", "w") as file:
-        file.write(all_text)
+        # Iterate through the new_articles dictionary
+        for url, article_data in new_articles.items():
+            article_uuid = article_data["uuid"]
+            article_text = article_data["article_text"]
 
+            # Split the article_text into chunks
+            chunks = embedder.create_chunks(article_text, words_per_chunk=500, step=30)
+
+            # Generate embeddings for each chunk
+            for i, chunk in enumerate(chunks):
+                embeddings_uuid = f"{article_uuid}_embedding-{i}"
+                chunk_text = " ".join(chunk)
+                chunk_embedding = embedder.len_safe_get_embedding(chunk_text, average=True)
+
+                # Save the embeddings in the CSV file
+                writer_article.writerow([article_uuid, embeddings_uuid, chunk_text, chunk_embedding])
+
+            # Embed the summary
+            summary = article_data["summary"]
+            summary_embedding = embedder.len_safe_get_embedding(summary, average=True)
+            summary_uuid = f"{article_uuid}_embedding-summary"
+
+            # Open the summary embeddings CSV file in append mode
+            with open("database/summary_embeddings.csv", "a", newline="") as s:
+                writer_summary = csv.writer(s)
+
+                # Write the header row if the file is empty
+                if s.tell() == 0:
+                    writer_summary.writerow(["article_uuid", "embedding_uuid", "text", "embedding"])
+
+                # Save the summary embeddings in the CSV file
+                writer_summary.writerow([article_uuid, summary_uuid, summary, summary_embedding])
+
+            print(f"  ✓ Generated embeddings for {url} and saved to the CSV")
+
+    print()
+    print("Generating HTML page")
     # Save the HTML page to a file
-    with open("your_world_in_brief.html", "w") as file:
-        html_page = generate_html_page(articles)
+    today = date.today().strftime("%Y-%m-%d")
+    with open(f"briefings/your_world_in_brief_{today}.html", "w") as file:
+        html_page = generate_html_page(new_articles)
         file.write(html_page)
