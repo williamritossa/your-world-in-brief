@@ -78,122 +78,107 @@ def summarise_article(title, text, sentences) -> str:
 
 
 # Function to generate the HTML page
-def generate_html_page(articles):
-    html_template = """
-    <!DOCTYPE html>
+def generate_html_page(articles, styles_file="styles.css", scripts_file="scripts.js") -> str:
+    with open(styles_file, "r") as f:
+        styles = f.read()
+
+    with open(scripts_file, "r") as f:
+        scripts = f.read()
+
+    html_template = """<!DOCTYPE html>
     <html lang="en">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
         <title>Your Daily Briefing</title>
         <style>
-            @media (prefers-color-scheme: dark) {{
-                /* Styles for dark mode */
-                body {{
-                    background-color: black;
-                    color: white;
-                }}
-                .date {{
-                    color: Silver;
-                }}
-            }}
-            @media (prefers-color-scheme: light) {{
-                /* Styles for light mode */
-                body {{
-                    background-color: white;
-                    color: black;
-                }}
-                .date {{
-                    color: DimGray;
-                }}
-            }}
-            body {{
-                font-family: Arial, sans-serif;
-                max-width: 800px;
-                margin: 0 auto;
-                padding: 40px;
-            }}
-            h1 {{
-                font-size: 28px;
-            }}
-            h2 {{
-                font-size: 22px;
-                display: inline;
-            }}
-            p {{
-                font-size: 18px;
-                margin-top: 15px;
-                margin-bottom: 5px;
-            }}
-            a {{
-                color: #E3120B;
-                text-decoration: none;
-            }}
-            .date {{
-                font-size: 18px;
-                font-weight: normal;
-                display: block;
-            }}
-            .article {{
-                display: flex;
-                flex-wrap: wrap;
-                align-items: flex-start;
-                margin-bottom: 40px;
-            }}
-            .header {{
-                flex-grow: 1;
-            }}
-            .logo {{
-                height: 50px;
-                width: auto;
-                margin-right: 20px;
-            }}
-            .title-date {{
-                margin-top: 2px;
-            }}
+            {styles}
         </style>
     </head>
     <body>
         <h1>Your world in brief</h1>
         {articles_html}
+        
+        <div class="chatbot-container">
+            <button id="chatbot-button" class="btn btn-primary rounded-circle">
+                <i class="bi bi-chat-dots-fill"></i>
+            </button>
+            <div id="chatbot-box" class="card d-none">
+                <div class="card-body">
+
+
+                    <div class="chat">
+                        <div id="chatbot-messages" class="messages"></div>
+                    </div>
+
+
+                    <div id="chatbot-messages" class="mb-3"></div>
+                    <div class="input-group chatbot-input-container">
+                        <input type="text" id="chatbot-input" class="form-control" placeholder="Type your message...">
+                        <div class="input-group-append">
+                            <button id="chatbot-send" class="btn"><i class="bi bi-arrow-right-circle"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </body>
+    <script>
+        {scripts}
+    </script>
     </html>
     """
 
     article_template = """
-    <div class="article">
-        <img class="logo" src="{logo_url}" alt="Source logo" />
-        <div class="header">
-            <div class="title-date">
-                <h2>{title}</h2>
-                <span class="date">{date}</span>
+        <div class="article">
+            <img class="logo fade-in fade-in-logo" src="{logo_url}" alt="Source logo" />
+            <div class="header">
+                <div class="title-date fade-in fade-in-title-date">
+                    <a href="{url}" target="_blank"><h2>{title}</h2></a>
+                    <span class="date">{date}</span>
+                </div>
+            </div>
+            <p class="fade-in fade-in-summary">{summary}</p>
+            <p class="fade-in fade-in-opinion"><span style="color: #E3120B;">Opinion:</span> {opinion}</p>
             </div>
         </div>
-        <p>{summary}</p>
-        <p><span style="color: #E3120B;">Opinion:</span> {opinion}</p>
-        <a href="{url}" target="_blank">Read more</a>
-        </div>
-    </div>
     """
+
+    # Get list of categories from today's articles
+    categories = {}
+    for url, article in articles.items():
+        category = article["category"]
+        if category not in categories:
+            categories[category] = []
+        categories[category].append({"url": url, **article})
 
     articles_html = ""
 
-    for url, article in articles.items():
-        title = article["title"]
-        date = article["date"]
-        summary = article["summary"]
-        source = article["source"]
-        opinion = article["opinion"]
+    for category, articles_in_category in categories.items():
+        articles_html += f"""<div class='category fade-in fade-in-category'>
+            <h2>{category}</h2>
+        <hr>"""
+        for article in articles_in_category:
+            title = article["title"]
+            date = article["date"]
+            summary = article["summary"]
+            source = article["source"]
+            opinion = article["opinion"]
+            url = article["url"]
 
-        if source == "The Economist":
-            logo_path = "https://www.economist.com/engassets/google-search-logo.f1ea908894.png"
-        elif source == "Bloomberg":
-            logo_path = "https://pbs.twimg.com/profile_images/1016326195221352450/KCcdUN0v_400x400.jpg"
+            if source == "The Economist":
+                logo_path = "https://www.economist.com/engassets/google-search-logo.f1ea908894.png"
+            elif source == "Bloomberg":
+                logo_path = "https://pbs.twimg.com/profile_images/1016326195221352450/KCcdUN0v_400x400.jpg"
+            else:
+                logo_path = "http://brentapac.com/wp-content/uploads/2017/03/transparent-square.png"
 
-        formatted_date = date.strftime("%d %B %Y")
-        articles_html += article_template.format(title=title, summary=summary, url=url, logo_url=logo_url, date=formatted_date, opinion=opinion)
+            formatted_date = date.strftime("%d %B %Y")
+            articles_html += article_template.format(title=title, summary=summary, url=url, logo_url=logo_path, date=formatted_date, opinion=opinion)
 
-    return html_template.format(articles_html=articles_html)
+    return html_template.format(styles=styles, scripts=scripts, articles_html=articles_html)
 
 
 def summarise_section(text):
@@ -237,6 +222,26 @@ def recursive_summarize(text_ChatML, max_tokens=3500):
     return recursive_summarize(messages, max_tokens)
 
 
+def categorise_article(text: str, allowed_categories: dict) -> str:
+    topics = "\n".join(allowed_categories.keys())
+    messages = [
+        {"role": "system",
+         "content": "You are a news article categoriser. Your output which category an article belongs to based on "
+                    "the text of the article and a list of topics. You only output the topic exactly as it is written "
+                    "in the list of topics."},
+        {"role": "user", "content": f"Here are a list of topics:\n{topics}\n\n\n\nHere is the article: {text}\n\n\n\n\n\nOutput the category the article belongs to"},
+    ]
+
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=messages,
+        temperature=0,
+        max_tokens=10,
+    )
+
+    category = response['choices'][0]['message']['content']
+    return category
+
 def preprocessing_for_gpt(article):
     title = article["title"]
     text = article["article_text"]
@@ -277,7 +282,38 @@ def preprocessing_for_gpt(article):
         summary = "Error summarising article."
         opinion = "Error generating opinion."
 
-    return summary, opinion
+    # Categorise the article
+    max_attempts = 5
+    success = False
+    allowed_categories = {
+        "Business and Economics": "covering topics related to companies, markets, investments, and finance.",
+        "Politics and Government": "covering topics related to national and international politics, government policy, and diplomacy.",
+        "Technology and Innovation": "covering topics related to new and emerging technologies, digital culture, and scientific research.",
+        "Environment and Sustainability": "covering topics related to climate change, energy, conservation, and the natural world.",
+        "Culture and Society": "covering topics related to art, literature, music, film, social trends, and identity.",
+        "Science and Health": "covering topics related to scientific research, health policy, medicine, and public health.",
+        "Education and Learning": "covering topics related to education policy, pedagogy, and innovations in teaching and learning.",
+        "International Relations and Diplomacy": "covering topics related to global politics, international organizations, and diplomacy.",
+        "Sports and Entertainment": "covering topics related to sports, entertainment, and popular culture.",
+        "History and Philosophy": "covering topics related to history, philosophy, and ideas."
+    }
+
+    for attempt in range(max_attempts):
+        try:
+            category = categorise_article(text, allowed_categories)
+            # Check category is in list of allowed categories, if not, set success to False
+            if category not in allowed_categories:
+                success = False
+                raise Exception(f"Category {category} not in list of allowed categories.")
+            success = True
+            break  # If the call is successful, exit the loop
+        except Exception as e:
+            print(f"Error categorising {text[:50]} (attempt {attempt + 1}): {e}")
+
+    if not success:
+        category = "Other"
+
+    return summary, opinion, category
 
 
 if __name__ == "__main__":
@@ -327,16 +363,25 @@ if __name__ == "__main__":
             article_source = article_data["source"]
 
             print(f"    • Generating summary and opinion")
-            article_summary, article_opinion = preprocessing_for_gpt(article_data)
+            #article_summary, article_opinion, article_category = preprocessing_for_gpt(article_data)
+            article_summary = "Big pharma companies are facing a patent cliff as patents for 190 drugs expire at the end of the decade, leaving sales worth $236bn at risk of a dramatic drop-off. Merck, one of the world's biggest drugmakers, has acquired Prometheus Biosciences for $10.8bn, a biotech firm based in California, to replenish its drugs pipeline. The pharmaceutical industry is turning to dealmaking as a way of compensating for the potential loss of revenue from expiring patents, with drugmakers driving a wave of consolidation across the sector."
+            article_opinion = "The patent cliff is not a new phenomenon in the pharmaceutical industry. In the past, companies have turned to mergers and acquisitions to offset the loss of revenue from expiring patents. However, this strategy is not always successful, as mergers can be costly and may not always result in the development of new drugs. It is important for the government to consider policies that encourage innovation and the development of new drugs, rather than relying solely on mergers and acquisitions to sustain the industry."
+
+            import random
+            article_category = random.choice(["politics", "business", "technology"])
+
+
             articles[url]["summary"] = article_summary
             articles[url]["opinion"] = article_opinion
+            articles[url]["category"] = article_category
 
-            writer.writerow([article_uuid, url, article_title, article_date, article_source, article_text, article_summary, article_opinion])
+            writer.writerow([article_uuid, url, article_title, article_category, article_date, article_source, article_text, article_summary, article_opinion])
             new_articles[url] = article_data
             print(f"    ✓ Added to the CSV with UUID {article_uuid}")
 
     print()
     print("Generating semantic embeddings")
+    """
     embedder = Embeddings()
 
     # Create and open the embeddings CSV file
@@ -381,7 +426,7 @@ if __name__ == "__main__":
                 writer_summary.writerow([article_uuid, summary_uuid, summary, summary_embedding])
 
             print(f"  ✓ Generated embeddings for {url} and saved to the CSV")
-
+    """
     print()
     print("Generating HTML page")
     # Save the HTML page to a file

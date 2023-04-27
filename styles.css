@@ -1,0 +1,234 @@
+@media (prefers-color-scheme: dark) {
+    /* Styles for dark mode */
+    body {
+        background-color: black;
+        color: white;
+    }
+    .date {
+        color: Silver;
+    }
+    --h2-color: white;
+}
+@media (prefers-color-scheme: light) {
+    /* Styles for light mode */
+    body {
+        background-color: white;
+        color: black;
+    }
+    .date {
+        color: DimGray;
+    }
+    --h2-color: black;
+}
+body {
+    font-family: Arial, sans-serif;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 40px;
+}
+h1 {
+    font-size: 28px;
+}
+h2 {
+    font-size: 22px;
+    display: inline;
+    color: var(--h2-color);
+}
+p {
+    font-size: 18px;
+    margin-top: 15px;
+    margin-bottom: 5px;
+}
+a {
+    /*color: #E3120B;*/
+    color: var(--h2-color);
+    text-decoration: none;
+}
+a:hover {
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+}
+.title-date {
+    margin-bottom: 0px;
+}
+.date {
+    font-size: 18px;
+    font-weight: normal;
+    display: block;
+}
+.article {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    margin-bottom: 40px;
+}
+.header {
+    flex-grow: 1;
+}
+img.logo {
+    border-radius: 8px;
+}
+.logo {
+    height: 50px;
+    width: auto;
+    margin-right: 20px;
+}
+.title-date {
+    margin-top: 2px;
+}
+
+/* Fade-in animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.fade-in {
+    opacity: 0;
+}
+
+.fade-in-category {
+    animation-delay: 0s;
+}
+
+.fade-in-logo {
+    animation-delay: 0s;
+}
+
+.fade-in-title-date {
+    animation-delay: 0s;
+}
+
+.fade-in-summary {
+    animation-delay: 0.5s;
+}
+
+.fade-in-opinion {
+    animation-delay: 0.5s;
+}
+
+.visible {
+    animation-name: fadeIn;
+    animation-duration: 1.5s;
+    animation-fill-mode: forwards;
+}
+
+
+/* Chat container */
+.chatbot-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1000;
+}
+
+#chatbot-button {
+    font-size: 1.5rem;
+}
+
+#chatbot-send {
+    font-size: 1.25rem;
+    background-color: white;
+}
+
+#chatbot-box {
+    background: #F1F1F1;
+    position: absolute;
+    bottom: 60px;
+    right: 0;
+    width: 300px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+#chatbot-messages {
+    overflow: visible; /* Allow box-shadow to overflow on top of parent div */
+}
+
+.chatbot-input-container {
+    border: 2px solid #ccc; /* Add border */
+    border-radius: 10px; /* Add rounded edges */
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); /* Add optional shadow */
+    background-color: white;
+}
+
+#chatbot-input {
+    font-size: 11pt;
+    border: 0px;
+}
+#chatbot-input:focus {
+    /* remove the border and highlight from the input */
+    border-color: transparent;
+    box-shadow: none;
+    outline: none;
+}
+
+.chat {
+}
+.chat .contact.bar {
+    flex-basis: 3.5rem;
+    flex-shrink: 0;
+    margin: 1rem;
+    box-sizing: border-box;
+    }
+.chat .messages {
+    flex-shrink: 2;
+    overflow-y: auto;
+    /*box-shadow: inset 0 2rem 2rem -2rem rgba(0, 0, 0, 0.05), inset 0 -2rem 2rem -2rem rgba(0, 0, 0, 0.05);*/
+}
+.chat .messages .message {
+    box-sizing: border-box;
+    padding: 0.5rem 1rem;
+    line-height: 1.25em;
+    border-radius: 1.125rem 1.125rem 1.125rem 0;
+    min-height: 2.25rem;
+    width: -webkit-fit-content;
+    width: -moz-fit-content;
+    width: fit-content;
+    max-width: 80%;
+    box-shadow: 0 0 2rem rgba(0, 0, 0, 0.075), 0rem 1rem 1rem -1rem rgba(0, 0, 0, 0.1);
+    font-size: 11pt;
+}
+.chat .messages .message.right {
+    margin: 0.75rem 0rem 0.75rem auto;
+    border-radius: 1.125rem 1.125rem 0 1.125rem;
+    background: #2267FF;
+    color: white;
+}
+.chat .messages .message .typing {
+    display: inline-block;
+    width: 0.5rem;
+    height: 0.5rem;
+    margin-left: 0.1rem;
+    margin-right: 0.1rem;
+    box-sizing: border-box;
+    background: #ccc;
+    border-radius: 50%;
+}
+.chat .messages .message .typing.typing-1 {
+  -webkit-animation: typing 3s infinite;
+          animation: typing 3s infinite;
+}
+.chat .messages .message .typing.typing-2 {
+  -webkit-animation: typing 3s 250ms infinite;
+          animation: typing 3s 250ms infinite;
+}
+.chat .messages .message .typing.typing-3 {
+  -webkit-animation: typing 3s 500ms infinite;
+          animation: typing 3s 500ms infinite;
+}
+
+@keyframes typing {
+    0%, 75%, 100% {
+        transform: translate(0, 0.25rem) scale(0.9);
+        opacity: 0.5;
+    }
+    25% {
+        transform: translate(0, -0.25rem) scale(1);
+        opacity: 1;
+    }
+}
