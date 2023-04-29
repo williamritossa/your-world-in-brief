@@ -1,6 +1,7 @@
 import openai
+import os
+import secrets
 import tiktoken
-from secrets import api_key
 from helpers import preprocess_text
 from money_stuff import scrape_money_stuff
 from the_economist import scrape_the_economist
@@ -8,9 +9,10 @@ import ast
 import uuid
 from embeddings import Embeddings
 import csv
-from datetime import date
+import json
+from datetime import date, timedelta, datetime
 
-openai.api_key = api_key
+openai.api_key = os.environ.get("OPENAI_API_KEY")
 
 
 def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0301"):
@@ -126,6 +128,8 @@ def generate_html_page(articles, styles_file="styles.css", scripts_file="scripts
         </div>
     </body>
     <script>
+        const OPENAI_API_KEY = "{openai_api_key}";
+        const embeddingsData = {embeddings_data}; // in JSON format
         {scripts}
     </script>
     </html>
@@ -178,7 +182,54 @@ def generate_html_page(articles, styles_file="styles.css", scripts_file="scripts
             formatted_date = date.strftime("%d %B %Y")
             articles_html += article_template.format(title=title, summary=summary, url=url, logo_url=logo_path, date=formatted_date, opinion=opinion)
 
-    return html_template.format(styles=styles, scripts=scripts, articles_html=articles_html)
+    # Get embeddings data to save as JSON and use in JS
+    embeddings_data = []
+    with open("database/article_embeddings.csv", "r") as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            embeddings_data.append(row)
+
+    n_days = 1  # Set the number of days you want to filter
+    article_added_dates = get_publication_dates()
+    filtered_embeddings_data = filter_embeddings_by_days(embeddings_data, article_added_dates, n_days)
+
+    return html_template.format(styles=styles, scripts=scripts, embeddings_data=filtered_embeddings_data, articles_html=articles_html, openai_api_key=os.environ.get("OPENAI_API_KEY"))
+
+
+def get_publication_dates():
+    """Returns a dictionary of article UUIDs and the date and time they were added to the database"""
+    article_added_dates = {}
+    with open("database/articles.csv", "r") as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            try:
+                uuid = row['UUID']
+                date_added = datetime.strptime(row['date_added'], '%Y-%m-%d %H:%M:%S')  # Adjust the date format accordingly
+                article_added_dates[uuid] = date_added
+            except ValueError:
+                print(f"Article UUID {uuid} has an invalid date: {row['date_added']}")
+                pass
+
+    return article_added_dates
+
+
+def filter_embeddings_by_days(embeddings_data, article_added_dates, days):
+    """Filters the embeddings data so that only articles saved within the last n days are included"""
+    filtered_embeddings = []
+    threshold_date = datetime.now() - timedelta(days=days)
+
+    for embedding in embeddings_data:
+        article_uuid = embedding['article_uuid']
+        date_added = article_added_dates[article_uuid]
+
+        try:
+            if date_added >= threshold_date:
+                filtered_embeddings.append(embedding)
+        except KeyError:
+            print(f"Article UUID {article_uuid} not found in article publication dates dictionary")
+            pass
+
+    return filtered_embeddings
 
 
 def summarise_section(text):
@@ -359,29 +410,24 @@ if __name__ == "__main__":
             articles[url]["uuid"] = article_uuid
             article_title = article_data["title"]
             article_date = article_data["date"].strftime("%Y-%m-%d %H:%M:%S")
+            article_date_added = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             article_text = article_data["article_text"]
             article_source = article_data["source"]
 
             print(f"    • Generating summary and opinion")
-            #article_summary, article_opinion, article_category = preprocessing_for_gpt(article_data)
-            article_summary = "Big pharma companies are facing a patent cliff as patents for 190 drugs expire at the end of the decade, leaving sales worth $236bn at risk of a dramatic drop-off. Merck, one of the world's biggest drugmakers, has acquired Prometheus Biosciences for $10.8bn, a biotech firm based in California, to replenish its drugs pipeline. The pharmaceutical industry is turning to dealmaking as a way of compensating for the potential loss of revenue from expiring patents, with drugmakers driving a wave of consolidation across the sector."
-            article_opinion = "The patent cliff is not a new phenomenon in the pharmaceutical industry. In the past, companies have turned to mergers and acquisitions to offset the loss of revenue from expiring patents. However, this strategy is not always successful, as mergers can be costly and may not always result in the development of new drugs. It is important for the government to consider policies that encourage innovation and the development of new drugs, rather than relying solely on mergers and acquisitions to sustain the industry."
-
-            import random
-            article_category = random.choice(["politics", "business", "technology"])
-
+            article_summary, article_opinion, article_category = preprocessing_for_gpt(article_data)
 
             articles[url]["summary"] = article_summary
             articles[url]["opinion"] = article_opinion
             articles[url]["category"] = article_category
 
-            writer.writerow([article_uuid, url, article_title, article_category, article_date, article_source, article_text, article_summary, article_opinion])
+            writer.writerow([article_uuid, url, article_title, article_date, article_date_added, article_category, article_source, article_text, article_summary, article_opinion])
             new_articles[url] = article_data
             print(f"    ✓ Added to the CSV with UUID {article_uuid}")
 
     print()
     print("Generating semantic embeddings")
-    """
+
     embedder = Embeddings()
 
     # Create and open the embeddings CSV file
@@ -398,7 +444,7 @@ if __name__ == "__main__":
             article_text = article_data["article_text"]
 
             # Split the article_text into chunks
-            chunks = embedder.create_chunks(article_text, words_per_chunk=500, step=30)
+            chunks = embedder.create_chunks(article_text, words_per_chunk=100, step=10)
 
             # Generate embeddings for each chunk
             for i, chunk in enumerate(chunks):
@@ -426,7 +472,7 @@ if __name__ == "__main__":
                 writer_summary.writerow([article_uuid, summary_uuid, summary, summary_embedding])
 
             print(f"  ✓ Generated embeddings for {url} and saved to the CSV")
-    """
+
     print()
     print("Generating HTML page")
     # Save the HTML page to a file

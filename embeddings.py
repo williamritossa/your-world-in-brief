@@ -4,13 +4,13 @@ from tenacity import retry, wait_random_exponential, stop_after_attempt, retry_i
 import pandas as pd
 import numpy as np
 from itertools import islice
-from secrets import api_key
+import os
 import tiktoken
 from typing import List, Dict, Optional, Tuple
 import json
 
 # Authenticate with the OpenAI API
-openai.api_key = api_key
+openai.api_key = os.environ.get("OPENAI_API_KEY")
 
 
 class Embeddings:

@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 from secrets import username, password
 import csv
+from readability import Document
 
 
 def login_to_economist(username, password):
@@ -66,10 +67,10 @@ def get_articles(soup, session, homepage_url) -> dict:
         print(f"    • Scraping '{title}' ({article_datetime}, {url})")
 
         # Get the article text/HTML for reader view
-        try:
-            article_text = article_soup.find("div", class_="css-13gy2f5 e1prll3w0").text
-        except:
-            article_text = None
+        html_content = article_response.text
+        doc = Document(html_content)
+        article_text = doc.summary()
+        article_text = BeautifulSoup(article_text, "html.parser").get_text()  # Remove HTML tags from text
 
         if article_datetime is not None and article_text is not None:  # if current_time - article_datetime < timedelta(hours=48):
             # Save to dictionary
