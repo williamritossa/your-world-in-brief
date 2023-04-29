@@ -54,6 +54,15 @@ async function getAssistantResponse(userMessage) {
         messagesWithContext.shift();
     }
 
+    // For the last, up to three, user messages in the messages array, replace them with the message with context
+    // Use a temporary messages array variable so we don't modify the original messages array while iterating over it
+    const tempMessages = [...messages];
+    for (let i = 0; i < messagesWithContext.length; i++) {
+        tempMessages[tempMessages.length - 1 - i] = messagesWithContext[messagesWithContext.length - 1 - i];
+    }
+
+    console.log(tempMessages);
+
     // A function to get the response from the OpenAI API
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
@@ -63,7 +72,7 @@ async function getAssistantResponse(userMessage) {
         },
         body: JSON.stringify({
             model: "gpt-3.5-turbo",
-            messages: [...messagesWithContext, ...messages],
+            messages: tempMessages,
             temperature: 0,
         }),
     });
@@ -123,8 +132,8 @@ document.addEventListener("DOMContentLoaded", function() {
 
             chatbotMessages.innerHTML += `<div class="message-container"><div class="message left">${assistantMessage}</div></div>`;
 
-            messages.push({ role: "assistant", content: assistantMessage });
             messages.push({ role: "user", content: userMessage });
+            messages.push({ role: "assistant", content: assistantMessage });
 
             chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
             chatbotBox.scrollTop = chatbotBox.scrollHeight;
