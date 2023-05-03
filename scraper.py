@@ -137,11 +137,13 @@ def generate_html_page(articles, styles_file="styles.css", scripts_file="scripts
 
     article_template = """
         <div class="article">
-            <img class="logo fade-in fade-in-logo" src="{logo_url}" alt="Source logo" />
             <div class="header">
-                <div class="title-date fade-in fade-in-title-date">
-                    <a href="{url}" target="_blank"><h2>{title}</h2></a>
-                    <span class="date">{date}</span>
+                <div class="header-left">
+                    <img class="logo fade-in fade-in-logo" src="{logo_url}" alt="Source logo" />
+                    <div class="title-date fade-in fade-in-title-date">
+                        <a href="{url}" target="_blank"><h2>{title}</h2></a>
+                        <span class="date">{date}</span>
+                    </div>    
                 </div>
             </div>
             <p class="fade-in fade-in-summary">{summary}</p>
@@ -219,10 +221,9 @@ def filter_embeddings_by_days(embeddings_data, article_added_dates, days):
     threshold_date = datetime.now() - timedelta(days=days)
 
     for embedding in embeddings_data:
-        article_uuid = embedding['article_uuid']
-        date_added = article_added_dates[article_uuid]
-
         try:
+            article_uuid = embedding['article_uuid']
+            date_added = article_added_dates[article_uuid]
             if date_added >= threshold_date:
                 filtered_embeddings.append(embedding)
         except KeyError:
