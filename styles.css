@@ -48,7 +48,29 @@ a:hover {
     text-decoration: underline;
     text-decoration-thickness: 2px;
 }
+.header {
+    /*flex-grow: 1;*/
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.header-left {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+}
+img.logo {
+    border-radius: 8px;
+}
+.logo {
+    height: 50px;
+    width: auto;
+    margin-right: 20px;
+}
 .title-date {
+    margin-top: 2px;
+    width: calc(100% - 70px); /* Adjust this value based on the logo size and desired spacing */
+    flex-wrap: wrap;
     margin-bottom: 0px;
 }
 .date {
@@ -61,20 +83,6 @@ a:hover {
     flex-wrap: wrap;
     align-items: flex-start;
     margin-bottom: 40px;
-}
-.header {
-    flex-grow: 1;
-}
-img.logo {
-    border-radius: 8px;
-}
-.logo {
-    height: 50px;
-    width: auto;
-    margin-right: 20px;
-}
-.title-date {
-    margin-top: 2px;
 }
 
 /* Fade-in animations */
@@ -140,8 +148,8 @@ img.logo {
     position: absolute;
     bottom: 60px;
     right: 0;
-    width: 350px;
-    max-height: 400px;
+    width: 320px;
+    max-height: 720px;
     overflow-y: auto;
 }
 

@@ -46,7 +46,11 @@ def get_articles(soup, session, homepage_url) -> dict:
 
         title = a.text
 
-        # Check if URL is already in database
+        # If title begins with "By Invitation", add a space after "Invitation"
+        if title.lower().startswith("by invitation"):
+            title = title.replace("By Invitation", "By Invitation | ")
+
+    # Check if URL is already in database
         if url in existing_urls:
             print(f"    ⏭ Skipping {url} (already in database)")
             continue
